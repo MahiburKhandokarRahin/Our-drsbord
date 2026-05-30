@@ -44,6 +44,7 @@ export interface EmployeeLoanRow {
   StartDate: string;
   Status: 'Active' | 'Paid';
   NextRepaymentDate: string;
+  SourceAccountID?: string; // Tracking the disbursement channel for automated repayments
 }
 
 export interface InventoryItemRow {

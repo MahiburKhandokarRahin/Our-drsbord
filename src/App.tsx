@@ -31,7 +31,8 @@ import {
   ChevronDown,
   Package,
   Tag,
-  Trash2
+  Trash2,
+  Check
 } from 'lucide-react';
 
 import { SpreadsheetData, BankAccountRow, ExpenseRow, PaymentRow, EmployeeLoanRow, UserRow, InventoryItemRow } from './types';
@@ -98,6 +99,8 @@ export default function App() {
     return localStorage.getItem('cuteriaa_apps_script_url') || 'https://script.google.com/macros/s/AKfycbwgZPDW2B5-5-jAgCOMBSJqF0NGHczO2efVP3wXeHh79K8SkFW_uFakI1y9WRUMn_fW/exec';
   });
   const [isConnecting, setIsConnecting] = useState(false);
+  const [loanSuccessMsg, setLoanSuccessMsg] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Active navigation tab
   const [activePanel, setActivePanel] = useState<ActivePanel>('analytics');
@@ -310,45 +313,109 @@ export default function App() {
   }, [db.Employee_Loans]);
 
   // Automated repayment program script implementation
-  const triggerDeductionsIntegrator = () => {
-    if (currentUser?.Role !== 'Admin') {
-      alert("Access Revoked: Only executive Admin users are cleared to run automated deductions schedules.");
-      return;
+  const settleLoanEarly = async (loanId: string) => {
+    if (currentUser?.Role !== 'Admin') return;
+
+    const loan = db.Employee_Loans.find(l => l.LoanID === loanId);
+    if (!loan) return;
+
+    if (loan.Status === 'Paid') return;
+
+    const recoveredAmount = loan.RemainingBalance;
+
+    const updatedLoans = db.Employee_Loans.map(l => {
+      if (String(l.LoanID) === String(loanId)) {
+        return {
+          ...l,
+          RemainingBalance: 0,
+          Status: 'Paid',
+          NextRepaymentDate: '-'
+        } as EmployeeLoanRow;
+      }
+      return l;
+    });
+
+    // Return money to source account if tracked
+    let updatedBanks = db.Bank_Accounts;
+    if (loan.SourceAccountID) {
+      updatedBanks = db.Bank_Accounts.map(b => {
+        if (b.AccountID === loan.SourceAccountID) {
+          return { ...b, CurrentBalance: b.CurrentBalance + recoveredAmount };
+        }
+        return b;
+      });
     }
 
-    const confirmed = window.confirm("Are you sure you want to run the automated payroll integration schedule? This will automatically process monthly deductions for all Active employee welfare loans.");
-    if (!confirmed) return;
-
-    let adjustedCount = 0;
-    const updatedLoans = db.Employee_Loans.map(loan => {
-      if (loan.Status !== 'Active') return loan;
-      
-      const balanceAfter = loan.RemainingBalance - loan.MonthlyDeductionAmount;
-      const isPaid = balanceAfter <= 0;
-
-      // Increment date by exactly 1 month
-      let nextRepayDate = loan.NextRepaymentDate;
-      if (loan.NextRepaymentDate) {
-        const d = new Date(loan.NextRepaymentDate);
-        d.setMonth(d.getMonth() + 1);
-        nextRepayDate = d.toISOString().split('T')[0];
-      }
-
-      adjustedCount++;
-      return {
-        ...loan,
-        RemainingBalance: isPaid ? 0 : Math.round(balanceAfter * 100) / 100,
-        Status: isPaid ? 'Paid' : 'Active',
-        NextRepaymentDate: nextRepayDate
-      };
-    });
-
-    updateDatabase({
+    await updateDatabase({
       ...db,
-      Employee_Loans: updatedLoans as EmployeeLoanRow[]
+      Employee_Loans: updatedLoans,
+      Bank_Accounts: updatedBanks
     });
 
-    alert(`Payroll Repayments Program Run Successful! Adjusted ${adjustedCount} employee loan structures.`);
+    setLoanSuccessMsg(`Loan settled. ৳${recoveredAmount.toLocaleString()} returned to ledger.`);
+    setTimeout(() => setLoanSuccessMsg(''), 4000);
+  };
+
+  const triggerDeductionsIntegrator = async () => {
+    if (currentUser?.Role !== 'Admin') return;
+    setIsSyncing(true);
+
+    try {
+      let adjustedCount = 0;
+      let totalRecovered = 0;
+      
+      // Track bank updates
+      const bankDeductionMap: Record<string, number> = {};
+
+      const updatedLoans = db.Employee_Loans.map(loan => {
+        if (loan.Status !== 'Active') return loan;
+        
+        const deductionAmt = loan.MonthlyDeductionAmount;
+        const balanceAfter = loan.RemainingBalance - deductionAmt;
+        const isPaid = balanceAfter <= 0;
+        const actualDeduction = isPaid ? loan.RemainingBalance : deductionAmt;
+
+        if (loan.SourceAccountID) {
+          bankDeductionMap[loan.SourceAccountID] = (bankDeductionMap[loan.SourceAccountID] || 0) + actualDeduction;
+        }
+
+        let nextRepayDate = loan.NextRepaymentDate;
+        if (loan.NextRepaymentDate) {
+          const d = new Date(loan.NextRepaymentDate);
+          d.setMonth(d.getMonth() + 1);
+          nextRepayDate = d.toISOString().split('T')[0];
+        }
+
+        adjustedCount++;
+        totalRecovered += actualDeduction;
+        
+        return {
+          ...loan,
+          RemainingBalance: isPaid ? 0 : Math.round(balanceAfter * 100) / 100,
+          Status: isPaid ? 'Paid' : 'Active',
+          NextRepaymentDate: isPaid ? '-' : nextRepayDate
+        } as EmployeeLoanRow;
+      });
+
+      // Update Banks
+      const updatedBanks = db.Bank_Accounts.map(b => {
+        if (bankDeductionMap[b.AccountID]) {
+          return { ...b, CurrentBalance: b.CurrentBalance + bankDeductionMap[b.AccountID] };
+        }
+        return b;
+      });
+
+      await updateDatabase({
+        ...db,
+        Employee_Loans: updatedLoans,
+        Bank_Accounts: updatedBanks
+      });
+      
+      setLoanSuccessMsg(`Cycle complete! ৳${totalRecovered.toLocaleString()} recovered to accounts.`);
+      setTimeout(() => setLoanSuccessMsg(''), 4000);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Base64 helper for image mock receipts
@@ -655,7 +722,8 @@ export default function App() {
       MonthlyDeductionAmount: Math.round(monthlyDeduct * 100) / 100,
       StartDate: new Date().toISOString().split('T')[0],
       Status: 'Active',
-      NextRepaymentDate: loanRepayDate
+      NextRepaymentDate: loanRepayDate,
+      SourceAccountID: loanAccId
     };
 
     // Deduct atomic balance from specified Bank_Accounts element
@@ -1784,13 +1852,28 @@ export default function App() {
                     <h3 className="text-lg font-bold tracking-tight text-white">Employee Loans Program</h3>
                     <p className="text-xs text-slate-400">Manage internal corporate welfare loans, structure start dates and execute monthly deduction programs</p>
                   </div>
-                  <div className="flex flex-wrap gap-2 shrink-0">
+                  <div className="flex flex-wrap gap-2 shrink-0 relative">
+                    <AnimatePresence>
+                      {loanSuccessMsg && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          className="absolute bottom-full mb-3 right-0 bg-emerald-500 text-slate-950 text-[10px] font-bold py-2 px-4 rounded-xl shadow-xl whitespace-nowrap z-50 flex items-center"
+                        >
+                          <Check size={12} className="mr-2" />
+                          {loanSuccessMsg}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     <button 
                       onClick={triggerDeductionsIntegrator}
-                      className="px-4 py-2 text-xs font-bold uppercase tracking-wider bg-slate-900 border border-slate-800 text-amber-400 hover:text-amber-300 rounded-xl hover:bg-slate-850 hover:border-amber-500/10 transition flex items-center hover:cursor-pointer"
+                      disabled={isSyncing}
+                      className={`px-4 py-2 text-xs font-bold uppercase tracking-wider bg-slate-900 border border-slate-800 text-amber-400 hover:text-amber-300 rounded-xl hover:bg-slate-850 hover:border-amber-500/10 transition flex items-center hover:cursor-pointer ${isSyncing ? 'opacity-50 cursor-wait' : ''}`}
                     >
-                      <RefreshCw size={13} className="mr-1.5 animate-spin" />
-                      Sync Loan Schedule
+                      <RefreshCw size={13} className={`mr-1.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                      {isSyncing ? 'Processing...' : 'Sync Loan Schedule'}
                     </button>
                     <button 
                       onClick={() => setActiveModal('addLoan')}
@@ -1815,6 +1898,7 @@ export default function App() {
                         <th className="p-5 text-center">Issue Date</th>
                         <th className="p-5 text-center">Repayment Status</th>
                         <th className="p-5 text-right">Next Repayment Date</th>
+                        <th className="p-5 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-850/60 font-medium">
@@ -1836,6 +1920,22 @@ export default function App() {
                             </span>
                           </td>
                           <td className="p-5 text-right text-rose-300 font-bold font-mono text-xs">{l.NextRepaymentDate}</td>
+                          <td className="p-5 text-right">
+                            {l.Status === 'Active' && (
+                              <button 
+                                onClick={() => settleLoanEarly(l.LoanID)}
+                                className="px-3 py-1.5 bg-slate-850 hover:bg-emerald-500 hover:text-slate-950 border border-slate-800 text-slate-400 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all flex items-center justify-center space-x-1.5 ml-auto group"
+                              >
+                                <Check size={12} className="group-hover:scale-125 transition-transform" />
+                                <span>Settle</span>
+                              </button>
+                            )}
+                            {l.Status === 'Paid' && (
+                              <div className="flex items-center justify-end text-emerald-500/40 text-[9px] font-bold uppercase tracking-tighter italic">
+                                Fully Closed
+                              </div>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
