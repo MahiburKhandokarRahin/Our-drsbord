@@ -1,0 +1,8 @@
+{
+  "name": "Cuteriaa Vibe Dashboard",
+  "description": "A production-ready, secure, and modern real-time Web Application using simulated or connected Google Sheets database with full banking, expense tracking, employee loans, and analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
