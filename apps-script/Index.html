@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cuteriaa Vibe Financial Dashboard</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS (xlsx) for Excel export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              900: '#14532d',
+            },
+            slate: {
+              950: '#020617',
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="h-full flex flex-col font-sans antialiased">
+  
+  <!-- LOADING SCREEN -->
+  <div id="loadingScreen" class="fixed inset-0 bg-slate-950 z-50 flex flex-col items-center justify-center">
+    <div class="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+    <h2 class="text-xl font-medium tracking-wide">Cuteriaa Vibe Dashboard</h2>
+    <p class="text-sm text-slate-400 mt-2">Loading live spreadsheet databases...</p>
+  </div>
+
+  <!-- AUTHENTICATION CONTAINER -->
+  <div id="authContainer" class="hidden min-h-screen flex items-center justify-center px-4 bg-slate-950">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+      <div class="text-center mb-8">
+        <span class="inline-flex items-center justify-center p-3 bg-emerald-500/10 rounded-2xl mb-4 border border-emerald-500/20">
+          <svg class="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </span>
+        <h2 class="text-2xl font-bold tracking-tight text-white mb-1">Welcome Back</h2>
+        <p class="text-slate-400 text-sm">Sign in to Cuteriaa Vibe Financial System</p>
+      </div>
+
+      <form id="loginForm" class="space-y-6">
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">Username</label>
+          <input type="text" id="loginUsername" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white rounded-xl px-4 py-3 text-sm transition-all focus:outline-none" placeholder="Enter username">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">Password</label>
+          <input type="password" id="loginPassword" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white rounded-xl px-4 py-3 text-sm transition-all focus:outline-none" placeholder="Enter password">
+        </div>
+        <div id="loginError" class="hidden text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 p-3 rounded-lg">
+          Invalid username or password.
+        </div>
+        <button type="submit" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold py-3 px-4 rounded-xl text-sm transition-all hover:shadow-lg hover:shadow-emerald-500/10">
+          Authenticate System
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MAIN APP STRUCTURE -->
+  <div id="appContainer" class="hidden flex-1 flex flex-col md:flex-row h-full overflow-hidden">
+    
+    <!-- SIDE NAV -->
+    <aside class="w-full md:w-64 bg-slate-900 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col shrink-0">
+      <div class="h-16 flex items-center px-6 border-b border-slate-800">
+        <span class="p-2 bg-emerald-500/10 rounded-lg mr-3 border border-emerald-500/20">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
+        </span>
+        <div class="flex flex-col">
+          <h1 class="text-sm font-bold tracking-tight text-white">Cuteriaa Vibe</h1>
+          <span class="text-[10px] font-mono uppercase text-slate-400 tracking-wider">Enterprise FinDev</span>
+        </div>
+      </div>
+
+      <!-- User Profile Card -->
+      <div class="p-4 border-b border-slate-800 bg-slate-950/30">
+        <p class="text-xs text-slate-400">Authenticated Session</p>
+        <p id="navUsername" class="text-sm font-medium text-emerald-400 mt-1">Admin User</p>
+        <span id="navRole" class="inline-flex items-center text-[10px] bg-slate-800 border border-slate-700 px-2.5 py-0.5 rounded-full text-slate-300 font-semibold mt-1.5 uppercase tracking-wide">Admin</span>
+      </div>
+
+      <!-- Sidebar Navigation Links -->
+      <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+        <button onclick="switchView('dashboard')" class="w-full flex items-center px-4 py-3 text-sm rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all transition-duration-150 font-medium tracking-wide">
+          <svg class="w-5 h-5 text-slate-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z"/></svg>
+          Analytics Core
+        </button>
+        <button onclick="switchView('bank')" class="w-full flex items-center px-4 py-3 text-sm rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all transition-duration-150 font-medium tracking-wide">
+          <svg class="w-5 h-5 text-slate-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+          Bank & Wallets
+        </button>
+        <button onclick="switchView('expenses')" class="w-full flex items-center px-4 py-3 text-sm rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all transition-duration-150 font-medium tracking-wide">
+          <svg class="w-5 h-5 text-slate-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l2-2 4 4m0-7l-3-3-3 3m2 12h.01M12 22a9 9 0 110-18 9 9 0 010 18z"/></svg>
+          Expenses tracker
+        </button>
+        <button onclick="switchView('payments')" class="w-full flex items-center px-4 py-3 text-sm rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all transition-duration-150 font-medium tracking-wide">
+          <svg class="w-5 h-5 text-slate-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+          Payments Ledger
+        </button>
+        <button id="navLoanButton" onclick="switchView('loans')" class="w-full flex items-center px-4 py-3 text-sm rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white transition-all transition-duration-150 font-medium tracking-wide">
+          <svg class="w-5 h-5 text-slate-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Employee Loans
+        </button>
+      </nav>
+
+      <!-- Logout action -->
+      <div class="p-4 border-t border-slate-800">
+        <button onclick="handleLogout()" class="w-full flex items-center justify-center px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all border border-transparent hover:border-rose-500/20">
+          Disconnect Session
+        </button>
+      </div>
+    </aside>
+
+    <!-- WORKSPACE AREA -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-slate-950">
+      
+      <!-- TOP CONTROL HEADER -->
+      <header class="h-16 border-b border-slate-800 px-8 flex items-center justify-between shrink-0 bg-slate-900/40">
+        <div class="flex items-center space-x-4">
+          <h2 id="viewTitle" class="text-lg font-bold tracking-tight text-white">Analytics Summary</h2>
+          <span class="h-4 w-[1px] bg-slate-800"></span>
+          <p class="text-xs text-slate-400 hidden sm:block">Spreadsheet DB Sync Status: <span class="text-emerald-400 font-mono">● Online & Live</span></p>
+        </div>
+
+        <!-- Notification Bell Component -->
+        <div class="flex items-center space-x-4">
+          <div class="relative">
+            <button onclick="toggleAlertsList()" class="p-2 text-slate-400 hover:text-emerald-400 relative focus:outline-none transition-colors">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <!-- Alert Badge -->
+              <span id="alertNotificationBadge" class="hidden absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 border-2 border-slate-950 rounded-full animate-pulse"></span>
+            </button>
+            
+            <!-- Bulletins list dropdown -->
+            <div id="alertsDropdown" class="hidden absolute right-0 mt-3 w-80 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-40 p-4">
+              <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                <h4 class="text-xs font-bold text-slate-300 uppercase tracking-widest">Loan Alerts & Warnings</h4>
+                <span id="alertsCountLabel" class="text-[10px] font-mono bg-rose-500/10 border border-rose-500/20 text-rose-400 px-2 py-0.5 rounded-full">0 Pending</span>
+              </div>
+              <div id="repaymentsAlertList" class="space-y-2 max-h-60 overflow-y-auto">
+                <p class="text-xs text-slate-500 text-center py-4">No critical repayment deadlines detected.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- VIEW PANELS -->
+      <div class="flex-1 overflow-y-auto p-8 space-y-8">
+        
+        <!-- DASHBOARD VIEW -->
+        <section id="view-dashboard" class="space-y-8">
+          
+          <!-- Stat cards -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-6 rounded-2xl shadow-xl">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Consolidated Balance</span>
+              <h3 id="statTotalBalance" class="text-3xl font-extrabold tracking-tight text-white mt-2">$0.00</h3>
+              <p class="text-xs text-emerald-400 mt-2 flex items-center">
+                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Aggregated from all active channels
+              </p>
+            </div>
+            <div class="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-6 rounded-2xl shadow-xl">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Current Month Expenses</span>
+              <h3 id="statMonthExpenses" class="text-3xl font-extrabold tracking-tight text-white mt-2">$0.00</h3>
+              <p class="text-xs text-slate-400 mt-2">Filtered for standard calendar month</p>
+            </div>
+            <div class="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-6 rounded-2xl shadow-xl">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Active Outstanding Loans</span>
+              <h3 id="statTotalLoans" class="text-3xl font-extrabold tracking-tight text-white mt-2">$0.00</h3>
+              <p class="text-xs text-rose-400 mt-2 flex items-center">
+                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                Pending internal repayments
+              </p>
+            </div>
+          </div>
+
+          <!-- Charts visual section -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+              <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-6 font-mono">Consolidated Expense Activity Trend</h3>
+              <div class="h-72 w-full relative">
+                <canvas id="expenseLineChart"></canvas>
+              </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col">
+              <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-6 font-mono">Spend Categories Breakdown</h3>
+              <div class="h-64 w-full relative flex-1 flex items-center justify-center">
+                <canvas id="expensePieChart" class="max-w-[240px]"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bar chart full row -->
+          <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-6 font-mono">Asset Allocation Across Channels</h3>
+            <div class="h-80 w-full relative">
+              <canvas id="bankBarChart"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- BANK VIEW -->
+        <section id="view-bank" class="hidden space-y-8">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-bold tracking-tight text-white">Financial Channels</h3>
+              <p class="text-sm text-slate-400">Manage bank accounts, digital corporate wallets, and vaults</p>
+            </div>
+            <div class="flex space-x-3">
+              <button onclick="openModal('addAccountModal')" class="bg-slate-800 hover:bg-slate-700 text-white font-semibold py-2 px-4 rounded-xl text-xs transition-all border border-slate-700">
+                + Link Channel
+              </button>
+              <button onclick="openModal('addBalanceModal')" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold py-2 px-4 rounded-xl text-xs transition-all">
+                + Fund Account
+              </button>
+            </div>
+          </div>
+
+          <div id="bankAccountsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- Dynamically populated bank card elements -->
+          </div>
+        </section>
+
+        <!-- EXPENSES VIEW -->
+        <section id="view-expenses" class="hidden space-y-8">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-bold tracking-tight text-white font-semibold">Corporate Expenses</h3>
+              <p class="text-sm text-slate-400">Ledger of internal purchases, utilities, and material replenishment</p>
+            </div>
+            <div class="flex space-x-3">
+              <button onclick="exportToExcel('Expenses')" class="bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 font-semibold py-2 px-4 rounded-xl text-xs transition-all flex items-center">
+                Export to Excel
+              </button>
+              <button onclick="exportToPDF('Expenses')" class="bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 font-semibold py-2 px-4 rounded-xl text-xs transition-all flex items-center">
+                Export PDF Report
+              </button>
+              <button onclick="openModal('addExpenseModal')" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold py-2 px-4 rounded-xl text-xs transition-all">
+                + Log Expense row
+              </button>
+            </div>
+          </div>
+
+          <!-- Expenses Ledger Data Grid -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            <div class="p-6 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
+              <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300">Transaction log</h4>
+              <input type="text" id="expenseSearchInput" onkeyup="filterTable('expenseSearchInput', 'expenseTableBody')" class="bg-slate-950 border border-slate-800 focus:border-emerald-500 text-slate-200 text-xs rounded-lg px-4 py-2 w-64 focus:outline-none" placeholder="Search entries...">
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm whitespace-nowrap">
+                <thead class="text-xs font-bold uppercase tracking-wider text-slate-400 bg-slate-950/40 border-b border-slate-800">
+                  <tr>
+                    <th class="p-6">Date</th>
+                    <th class="p-6">Expense ID</th>
+                    <th class="p-6">Category</th>
+                    <th class="p-6">Description</th>
+                    <th class="p-6">Source Channel</th>
+                    <th class="p-6">Amount</th>
+                    <th class="p-6">Receipt File</th>
+                  </tr>
+                </thead>
+                <tbody id="expenseTableBody" class="divide-y divide-slate-800/60">
+                  <!-- Dynamically Rendered -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- PAYMENTS VIEW -->
+        <section id="view-payments" class="hidden space-y-8">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-bold tracking-tight text-white font-semibold">Corporate Disbursals</h3>
+              <p class="text-sm text-slate-400">Payment vouchers, logistics bills, and supplier settlements</p>
+            </div>
+            <div class="flex space-x-3">
+              <button onclick="exportToExcel('Payments')" class="bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 font-semibold py-2 px-4 rounded-xl text-xs transition-all flex items-center">
+                Export to Excel
+              </button>
+              <button onclick="exportToPDF('Payments')" class="bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 font-semibold py-2 px-4 rounded-xl text-xs transition-all flex items-center">
+                Export PDF Report
+              </button>
+              <button onclick="openModal('addPaymentModal')" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold py-2 px-4 rounded-xl text-xs transition-all">
+                + Add Payment Voucher
+              </button>
+            </div>
+          </div>
+
+          <!-- Payments Table -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl overflow-x-auto">
+            <div class="p-6 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
+              <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300">Disbursal Log</h4>
+              <input type="text" id="paymentSearchInput" onkeyup="filterTable('paymentSearchInput', 'paymentTableBody')" class="bg-slate-950 border border-slate-800 focus:border-emerald-500 text-slate-200 text-xs rounded-lg px-4 py-2 w-64 focus:outline-none" placeholder="Search settlements...">
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm whitespace-nowrap">
+                <thead class="text-xs font-bold uppercase tracking-wider text-slate-400 bg-slate-950/40 border-b border-slate-800">
+                  <tr>
+                    <th class="p-6">Date</th>
+                    <th class="p-6">Payment ID</th>
+                    <th class="p-6">Paid To</th>
+                    <th class="p-6">Category</th>
+                    <th class="p-6">Method</th>
+                    <th class="p-6 font-semibold">Amount</th>
+                    <th class="p-6">Status</th>
+                    <th class="p-6">Voucher Doc</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentTableBody" class="divide-y divide-slate-800/60">
+                  <!-- Dynamically rendered -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- LOANS VIEW -->
+        <section id="view-loans" class="hidden space-y-8">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-bold tracking-tight text-white font-semibold">Employee Loans & Advances</h3>
+              <p class="text-sm text-slate-400">Track company welfare loans, monthly salary deductions, and repayment timelines</p>
+            </div>
+            <div class="flex space-x-3">
+              <button onclick="triggerRunLoanRepaymentScript()" class="bg-slate-800 hover:bg-slate-700 text-amber-400 font-semibold border border-slate-700 hover:border-amber-500/20 py-2 px-4 rounded-xl text-xs transition-all flex items-center">
+                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Sync Loan Repayment Schedule
+              </button>
+              <button onclick="openModal('addLoanModal')" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold py-2 px-4 rounded-xl text-xs transition-all">
+                + Issue Employee Loan
+              </button>
+            </div>
+          </div>
+
+          <!-- Loans table -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm whitespace-nowrap">
+                <thead class="text-xs font-bold uppercase tracking-wider text-slate-400 bg-slate-950/40 border-b border-slate-800">
+                  <tr>
+                    <th class="p-6">Loan ID</th>
+                    <th class="p-6">Employee Name</th>
+                    <th class="p-6">Principal Amount</th>
+                    <th class="p-6 font-semibold">Remaining Balance</th>
+                    <th class="p-6">Monthly Deduction</th>
+                    <th class="p-6">Issue Date</th>
+                    <th class="p-6">Status</th>
+                    <th class="p-6">Next Repayment Date</th>
+                  </tr>
+                </thead>
+                <tbody id="loanTableBody" class="divide-y divide-slate-800/60">
+                  <!-- Dynamically rendered -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ALL MODAL COMPONENTS -->
+  
+  <!-- Add Account Modal -->
+  <div id="addAccountModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
+        <h3 class="text-sm font-bold uppercase tracking-widest text-white">Link New Account</h3>
+        <button onclick="closeModal('addAccountModal')" class="text-slate-400 hover:text-white">&times;</button>
+      </div>
+      <form id="addAccountForm" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Account Name</label>
+          <input type="text" id="bankNameField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none" placeholder="e.g. Citibank Corp">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Account Number / IBAN</label>
+          <input type="text" id="bankNumField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none" placeholder="e.g. 500-1123-2391">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Opening Ledger Balance ($)</label>
+          <input type="number" id="bankBalanceField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none" placeholder="e.g. 150000">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Account Type</label>
+          <select id="bankTypeField" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+            <option value="Bank">Bank Account</option>
+            <option value="Mobile Wallet">Mobile Wallet / Digital Cash</option>
+            <option value="Cash">Cash Vault</option>
+          </select>
+        </div>
+        <button type="submit" class="w-full bg-emerald-500 text-slate-950 py-3 font-semibold rounded-xl text-xs hover:bg-emerald-600 transition-all shadow-lg hover:shadow-emerald-500/10">
+          Save Bank Account
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Balance Modal -->
+  <div id="addBalanceModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
+        <h3 class="text-sm font-bold uppercase tracking-widest text-white">Fund Financial Channel</h3>
+        <button onclick="closeModal('addBalanceModal')" class="text-slate-400 hover:text-white">&times;</button>
+      </div>
+      <form id="addBalanceForm" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Select Channel</label>
+          <select id="fundSelectAccount" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Amount to Deposit ($)</label>
+          <input type="number" id="fundAmountField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none" placeholder="e.g. 50000">
+        </div>
+        <button type="submit" class="w-full bg-emerald-500 text-slate-950 py-3 font-semibold rounded-xl text-xs hover:bg-emerald-600 transition-all shadow-lg hover:shadow-emerald-500/10">
+          Confirm Deposit File
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Expense Modal -->
+  <div id="addExpenseModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
+        <h3 class="text-sm font-bold uppercase tracking-widest text-white">Record Expense</h3>
+        <button onclick="closeModal('addExpenseModal')" class="text-slate-400 hover:text-white">&times;</button>
+      </div>
+      <form id="addExpenseForm" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Date</label>
+          <input type="date" id="expDateField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Category</label>
+          <select id="expCategoryField" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+            <option value="Inventory">Inventory Purchase</option>
+            <option value="Utilities">Utilities & Comm</option>
+            <option value="Marketing">Marketing / Ads</option>
+            <option value="Software / SaaS">Software & Cloud Hosting</option>
+            <option value="Logistics">Logistics & Freight</option>
+            <option value="Maintenance">Maintenance & Rent</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Amount ($)</label>
+          <input type="number" id="expAmountField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none" placeholder="e.g. 14500">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Deduct Channel</label>
+          <select id="expAccountSelect" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Description</label>
+          <textarea id="expDescField" rows="2" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300 resize-none" placeholder="Purchase purpose / specs..."></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Receipt Voucher Image</label>
+          <input type="file" id="expFileField" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs focus:outline-none text-slate-400">
+        </div>
+        <button type="submit" class="w-full bg-emerald-500 text-slate-950 py-3 font-semibold rounded-xl text-xs hover:bg-emerald-600 transition-all">
+          Record Ledger entry
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Payment Modal -->
+  <div id="addPaymentModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
+        <h3 class="text-sm font-bold uppercase tracking-widest text-white">Issue Payment Entry</h3>
+        <button onclick="closeModal('addPaymentModal')" class="text-slate-400 hover:text-white">&times;</button>
+      </div>
+      <form id="addPaymentForm" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Date</label>
+          <input type="date" id="pmtDateField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Beneficiary / Supplier</label>
+          <input type="text" id="pmtPaidToField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none" placeholder="e.g. Apex Freight">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Category</label>
+          <select id="pmtCategoryField" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+            <option value="Inventory">Inventory Repayment</option>
+            <option value="Utilities">Rent / Power / Telco</option>
+            <option value="Maintenance">Vendor payments</option>
+            <option value="Logistics">Forwarding Logistics</option>
+            <option value="Software / SaaS">Software Subscriptions</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Amount Paid ($)</label>
+          <input type="number" id="pmtAmountField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Deduct Channel</label>
+          <select id="pmtAccountSelect" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Disbursal Method</label>
+          <select id="pmtMethodField" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+            <option value="Bank Transfer">Direct Wire bank Transfer</option>
+            <option value="Corporate Card">Visa Corporate Card</option>
+            <option value="Mobile Pay">Mobile Business Account</option>
+            <option value="Petty Cash">Cash vault Drawer</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Voucher Status</label>
+          <select id="pmtStatusField" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+            <option value="Cleared">Cleared & Posted</option>
+            <option value="Pending Clearance">Awaiting bank settlement</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Supporting Invoice Upload</label>
+          <input type="file" id="pmtFileField" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-400 focus:outline-none">
+        </div>
+        <button type="submit" class="w-full bg-emerald-500 text-slate-950 py-3 font-semibold rounded-xl text-xs hover:bg-emerald-600 transition-all">
+          Disburse Voucher
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Employee Loan Modal -->
+  <div id="addLoanModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
+        <h3 class="text-sm font-bold uppercase tracking-widest text-white">Issue Corporate Loan</h3>
+        <button onclick="closeModal('addLoanModal')" class="text-slate-400 hover:text-white">&times;</button>
+      </div>
+      <form id="addLoanForm" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Employee Full Name</label>
+          <input type="text" id="loanEmpNameField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none" placeholder="Alisha Rahman">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Total Principal Amount ($)</label>
+          <input type="number" id="loanAmountField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">Repayment Period (Months)</label>
+          <input type="number" id="loanMonthsField" required min="1" max="60" class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none" placeholder="e.g. 12">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-300 tracking-wider mb-2">First Deduction Release Date</label>
+          <input type="date" id="loanRepayDateField" required class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2.5 px-4 text-xs focus:outline-none text-slate-300">
+        </div>
+        <button type="submit" class="w-full bg-emerald-500 text-slate-950 py-3 font-semibold rounded-xl text-xs hover:bg-emerald-600 transition-all">
+          Establish Active Loan
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- SCRIPT LOGIC -->
+  <script>
+    var globalState = {
+      isLoaded: false,
+      user: null,
+      db: {}
+    };
+
+    var currentView = 'dashboard';
+    var charts = {};
+
+    // Initialization hook
+    window.onload = function() {
+      // Check for saved session in Apps Script browser context
+      var session = localStorage.getItem('cuteriaa_google_script_session');
+      if (session) {
+        try {
+          var parsed = JSON.parse(session);
+          globalState.user = parsed;
+          fetchLiveDatabase();
+        } catch(e) {
+          showLoginScreen();
+        }
+      } else {
+        showLoginScreen();
+      }
+    };
+
+    function showLoginScreen() {
+      document.getElementById('loadingScreen').classList.add('hidden');
+      document.getElementById('authContainer').classList.remove('hidden');
+      document.getElementById('appContainer').classList.add('hidden');
+    }
+
+    // Google Apps Script verifying credentials asynchronously
+    document.getElementById('loginForm').onsubmit = function(e) {
+      e.preventDefault();
+      var u = document.getElementById('loginUsername').value;
+      var p = document.getElementById('loginPassword').value;
+      
+      var btn = e.target.querySelector('button');
+      btn.textContent = "Verifying Credentials...";
+      btn.disabled = true;
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(res) {
+            btn.textContent = "Authenticate System";
+            btn.disabled = false;
+            
+            if (res && res.success) {
+              globalState.user = res;
+              localStorage.setItem('cuteriaa_google_script_session', JSON.stringify(res));
+              document.getElementById('loginError').classList.add('hidden');
+              fetchLiveDatabase();
+            } else {
+              document.getElementById('loginError').classList.remove('hidden');
+            }
+          })
+          .withFailureHandler(function() {
+            btn.textContent = "Authenticate System";
+            btn.disabled = false;
+            document.getElementById('loginError').classList.remove('hidden');
+          })
+          .verifyUser(u, p);
+      } else {
+        // Safe development simulation fallback
+        setTimeout(function() {
+          btn.textContent = "Authenticate System";
+          btn.disabled = false;
+          if ((u === 'admin' && p === 'admin123') || (u === 'manager' && p === 'manager123')) {
+            var simUser = { success: true, username: u, role: u === 'admin' ? 'Admin' : 'Manager' };
+            globalState.user = simUser;
+            localStorage.setItem('cuteriaa_google_script_session', JSON.stringify(simUser));
+            fetchLiveDatabase();
+          } else {
+            document.getElementById('loginError').classList.remove('hidden');
+          }
+        }, 1000);
+      }
+    };
+
+    function fetchLiveDatabase() {
+      // Hide auth
+      document.getElementById('authContainer').classList.add('hidden');
+      document.getElementById('loadingScreen').classList.remove('hidden');
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(dbData) {
+            globalState.db = dbData;
+            onDatabaseSynced();
+          })
+          .getSpreadsheetData();
+      } else {
+        // Local simulation data (so it still renders when viewing outside Sheets Applet)
+        setTimeout(function() {
+          globalState.db = {
+            Users: [],
+            Bank_Accounts: [
+              { AccountID: 'ACC-001', AccountName: 'Standard Chartered Operating', AccountNumber: '110-845-2921-01', CurrentBalance: 2450000, AccountType: 'Bank' },
+              { AccountID: 'ACC-002', AccountName: 'bKash Corporate Merchant', AccountNumber: '01712345678', CurrentBalance: 320000, AccountType: 'Mobile Wallet' },
+              { AccountID: 'ACC-003', AccountName: 'Petty Cash Safe', AccountNumber: 'CASH-VAULT-03', CurrentBalance: 45000, AccountType: 'Cash' }
+            ],
+            Expenses: [
+              { Timestamp: '2026-05-15T09:30:00Z', ExpenseID: 'EXP-101', Date: '2026-05-15', Category: 'Inventory', Amount: 145000, AccountID: 'ACC-001', Description: 'Raw materials bulk replenishment', ReceiptDriveLink: '#' }
+            ],
+            Payments: [
+              { Timestamp: '2026-05-10T12:00:00Z', PaymentID: 'PMT-501', Date: '2026-05-10', PaidTo: 'Figma Inc', Amount: 12500, Category: 'Software / SaaS', PaymentMethod: 'Corporate Card', Status: 'Cleared', DocumentDriveLink: '#' }
+            ],
+            Employee_Loans: [
+              { LoanID: 'LON-5001', EmployeeName: 'Alisha Rahman', TotalLoanAmount: 150000, RemainingBalance: 90000, MonthlyDeductionAmount: 15000, StartDate: '2026-01-01', Status: 'Active', NextRepaymentDate: '2026-06-01' }
+            ]
+          };
+          onDatabaseSynced();
+        }, 800);
+      }
+    }
+
+    function onDatabaseSynced() {
+      document.getElementById('loadingScreen').classList.add('hidden');
+      document.getElementById('appContainer').classList.remove('hidden');
+      
+      // Update UI with authenticated privileges
+      document.getElementById('navUsername').textContent = globalState.user.username;
+      document.getElementById('navRole').textContent = globalState.user.role;
+
+      if (globalState.user.role === 'Manager') {
+        document.getElementById('navLoanButton').classList.add('hidden'); // Managers can't view/manage corporate loans
+      } else {
+        document.getElementById('navLoanButton').classList.remove('hidden');
+      }
+
+      // Populate view selectors
+      populateDynamicSelectors();
+
+      // Render Active View Panels
+      renderDashboardStats();
+      renderBankAccountsGrid();
+      renderExpensesTable();
+      renderPaymentsTable();
+      renderLoansTable();
+
+      // Build charts
+      rebuildCharts();
+
+      // Process Loan Warnings / Push Bulletin
+      processLoanDeductionAlerts();
+    }
+
+    function switchView(viewName) {
+      if (globalState.user.role === 'Manager' && viewName === 'loans') {
+        alert("Access Denied: Managers do not have permission to view internal Employee Loan operations.");
+        return;
+      }
+      currentView = viewName;
+      
+      // Toggle visibility
+      document.getElementById('view-dashboard').classList.add('hidden');
+      document.getElementById('view-bank').classList.add('hidden');
+      document.getElementById('view-expenses').classList.add('hidden');
+      document.getElementById('view-payments').classList.add('hidden');
+      document.getElementById('view-loans').classList.add('hidden');
+
+      document.getElementById('view-' + viewName).classList.remove('hidden');
+
+      // Update Header title
+      var titles = {
+        'dashboard': 'Analytics core',
+        'bank': 'Financial Channels',
+        'expenses': 'Expenses Ledger',
+        'payments': 'Disbursal log',
+        'loans': 'Employee Welfare Loans'
+      };
+      document.getElementById('viewTitle').textContent = titles[viewName] || 'Dashboard';
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('cuteriaa_google_script_session');
+      globalState.user = null;
+      showLoginScreen();
+    }
+
+    // Modal Helpers
+    function openModal(id) {
+      if (globalState.user.role === 'Manager' && (id === 'addAccountModal' || id === 'addBalanceModal' || id === 'addLoanModal')) {
+        alert("Action Revoked: Manager accounts are restricted to expense logging operations.");
+        return;
+      }
+      document.getElementById(id).classList.remove('hidden');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    // Helper functions for UI Populates
+    function populateDynamicSelectors() {
+      var bankAccounts = globalState.db.Bank_Accounts || [];
+      var fundSelect = document.getElementById('fundSelectAccount');
+      var expSelect = document.getElementById('expAccountSelect');
+      var pmtSelect = document.getElementById('pmtAccountSelect');
+
+      var opts = "";
+      bankAccounts.forEach(function(acc) {
+        opts += `<option value="${acc.AccountID}">${acc.AccountName} ($${Number(acc.CurrentBalance).toLocaleString()})</option>`;
+      });
+
+      fundSelect.innerHTML = opts;
+      expSelect.innerHTML = opts;
+      pmtSelect.innerHTML = opts;
+    }
+
+    function renderDashboardStats() {
+      var accounts = globalState.db.Bank_Accounts || [];
+      var expenses = globalState.db.Expenses || [];
+      var loans = globalState.db.Employee_Loans || [];
+
+      // Consolidated balance
+      var totalBal = 0;
+      accounts.forEach(function(acc) { totalBal += (Number(acc.CurrentBalance) || 0); });
+      document.getElementById('statTotalBalance').textContent = "$" + totalBal.toLocaleString();
+
+      // Current calendar month expenses
+      var targetMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+      var currMonthExp = 0;
+      expenses.forEach(function(e) {
+        if (e.Date && e.Date.startsWith(targetMonth)) {
+          currMonthExp += (Number(e.Amount) || 0);
+        }
+      });
+      document.getElementById('statMonthExpenses').textContent = "$" + currMonthExp.toLocaleString();
+
+      // Active Loans Balance
+      var outstandingLoans = 0;
+      loans.forEach(function(l) {
+        if (l.Status === 'Active') {
+          outstandingLoans += (Number(l.RemainingBalance) || 0);
+        }
+      });
+      document.getElementById('statTotalLoans').textContent = "$" + outstandingLoans.toLocaleString();
+    }
+
+    function renderBankAccountsGrid() {
+      var grid = document.getElementById('bankAccountsGrid');
+      var accounts = globalState.db.Bank_Accounts || [];
+      
+      var html = "";
+      if (accounts.length === 0) {
+        grid.innerHTML = `<div class="col-span-full text-center py-8 text-slate-500">No banking channels connected.</div>`;
+        return;
+      }
+
+      accounts.forEach(function(acc) {
+        var cardBorder = acc.AccountType === 'Cash' ? 'border-amber-500/20 bg-amber-500/5' : 'border-slate-800 bg-slate-900';
+        html += `
+          <div class="border rounded-2xl p-6 ${cardBorder} shadow-lg relative overflow-hidden group">
+            <span class="text-[10px] font-mono tracking-widest uppercase text-slate-400">${acc.AccountType} Ledger</span>
+            <h4 class="text-white font-medium mt-1 truncate">${acc.AccountName}</h4>
+            <p class="text-xs text-slate-500 mt-0.5">${acc.AccountNumber}</p>
+            <div class="mt-6 flex items-baseline justify-between">
+              <span class="text-2xl font-extrabold text-white">$${Number(acc.CurrentBalance).toLocaleString()}</span>
+            </div>
+            <div class="absolute inset-x-0 bottom-0 h-1 bg-emerald-500 scale-x-0 group-hover:scale-x-100 transition-transform origin-left"></div>
+          </div>
+        `;
+      });
+
+      grid.innerHTML = html;
+    }
+
+    function renderExpensesTable() {
+      var body = document.getElementById('expenseTableBody');
+      var expenses = globalState.db.Expenses || [];
+      var html = "";
+
+      if (expenses.length === 0) {
+        body.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-500">No expense logs found.</td></tr>`;
+        return;
+      }
+
+      // Sort newest first
+      expenses.slice().reverse().forEach(function(e) {
+        var fileCell = e.ReceiptDriveLink ? `
+          <a href="${e.ReceiptDriveLink}" target="_blank" class="text-emerald-400 hover:underline flex items-center font-medium">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            View
+          </a>
+        ` : `<span class="text-slate-600">- No Files</span>`;
+
+        html += `
+          <tr class="hover:bg-slate-900/40 transition-colors">
+            <td class="p-6 font-medium text-slate-300 font-mono text-xs">${e.Date}</td>
+            <td class="p-6 text-slate-500 font-mono text-xs font-semibold">${e.ExpenseID || '-'}</td>
+            <td class="p-6 text-white text-xs"><span class="px-2.5 py-1 bg-slate-800 rounded-full font-semibold border border-slate-700">${e.Category}</span></td>
+            <td class="p-6 text-slate-300 text-xs">${e.Description}</td>
+            <td class="p-6 text-slate-400 text-xs font-mono">${e.AccountID || 'Cash'}</td>
+            <td class="p-6 text-white font-bold text-xs">$${Number(e.Amount).toLocaleString()}</td>
+            <td class="p-6 text-xs">${fileCell}</td>
+          </tr>
+        `;
+      });
+
+      body.innerHTML = html;
+    }
+
+    function renderPaymentsTable() {
+      var body = document.getElementById('paymentTableBody');
+      var payments = globalState.db.Payments || [];
+      var html = "";
+
+      if (payments.length === 0) {
+        body.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-slate-500">No disbursements posted.</td></tr>`;
+        return;
+      }
+
+      payments.slice().reverse().forEach(function(p) {
+        var fileCell = p.DocumentDriveLink ? `
+          <a href="${p.DocumentDriveLink}" target="_blank" class="text-emerald-400 hover:underline flex items-center font-medium">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            Voucher
+          </a>
+        ` : `<span class="text-slate-600">- No Docs</span>`;
+
+        var badgeColor = p.Status === 'Cleared' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+
+        html += `
+          <tr class="hover:bg-slate-900/40 transition-colors">
+            <td class="p-6 font-medium text-slate-300 font-mono text-xs">${p.Date}</td>
+            <td class="p-6 text-slate-500 font-mono text-xs font-semibold">${p.PaymentID || '-'}</td>
+            <td class="p-6 text-white font-semibold text-xs">${p.PaidTo}</td>
+            <td class="p-6 text-slate-300 text-xs">${p.Category}</td>
+            <td class="p-6 text-slate-400 text-xs">${p.PaymentMethod}</td>
+            <td class="p-6 text-white font-bold text-xs">$${Number(p.Amount).toLocaleString()}</td>
+            <td class="p-6 text-xs"><span class="px-2.5 py-0.5 text-[10px] uppercase rounded-full font-semibold border ${badgeColor}">${p.Status}</span></td>
+            <td class="p-6 text-xs">${fileCell}</td>
+          </tr>
+        `;
+      });
+
+      body.innerHTML = html;
+    }
+
+    function renderLoansTable() {
+      var body = document.getElementById('loanTableBody');
+      if (!body) return; // Hidden if manager
+      
+      var loans = globalState.db.Employee_Loans || [];
+      var html = "";
+
+      if (loans.length === 0) {
+        body.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-slate-500">No active welfare loans issued.</td></tr>`;
+        return;
+      }
+
+      loans.forEach(function(l) {
+        var activeBadge = l.Status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-800 text-slate-400 border-slate-750';
+        html += `
+          <tr class="hover:bg-slate-900/40 transition-colors">
+            <td class="p-6 font-semibold font-mono text-xs text-slate-400">${l.LoanID}</td>
+            <td class="p-6 text-white font-semibold text-xs">${l.EmployeeName}</td>
+            <td class="p-6 text-slate-400 text-xs">$${Number(l.TotalLoanAmount).toLocaleString()}</td>
+            <td class="p-6 text-white font-bold text-xs">$${Number(l.RemainingBalance).toLocaleString()}</td>
+            <td class="p-6 text-amber-400 font-medium text-xs">$${Number(l.MonthlyDeductionAmount).toLocaleString()}/mo</td>
+            <td class="p-6 text-slate-400 font-mono text-xs">${l.StartDate}</td>
+            <td class="p-6 text-xs"><span class="px-2.5 py-0.5 text-[10px] uppercase rounded-full font-semibold border ${activeBadge}">${l.Status}</span></td>
+            <td class="p-6 text-rose-300 font-semibold font-mono text-xs">${l.NextRepaymentDate || '-'}</td>
+          </tr>
+        `;
+      });
+
+      body.innerHTML = html;
+    }
+
+    // CHART.JS FACTORY BUILDERS
+    function rebuildCharts() {
+      if (charts.line) charts.line.destroy();
+      if (charts.pie) charts.pie.destroy();
+      if (charts.bar) charts.bar.destroy();
+
+      // Configure Charts defaults
+      Chart.defaults.color = "#94a3b8";
+      Chart.defaults.borderColor = "#1e293b";
+
+      var expenses = globalState.db.Expenses || [];
+      var accounts = globalState.db.Bank_Accounts || [];
+
+      // 1. Line Chart Data Preparation (Last 6 Months Trend)
+      var months = [];
+      for (var i = 5; i >= 0; i--) {
+        var d = new Date();
+        d.setMonth(d.getMonth() - i);
+        months.push(d.toISOString().substring(0, 7));
+      }
+
+      var monthAmounts = Array(6).fill(0);
+      expenses.forEach(function(e) {
+        if (e.Date) {
+          var key = e.Date.substring(0, 7);
+          var idx = months.indexOf(key);
+          if (idx !== -1) {
+            monthAmounts[idx] += (Number(e.Amount) || 0);
+          }
+        }
+      });
+
+      var monthLabels = months.map(function(m) {
+        var d = new Date(m + "-15");
+        return d.toLocaleDateString('default', { month: 'short', year: '2-digit' });
+      });
+
+      var ctxLine = document.getElementById('expenseLineChart').getContext('2d');
+      charts.line = new Chart(ctxLine, {
+        type: 'line',
+        data: {
+          labels: monthLabels,
+          datasets: [{
+            label: 'Monthly Purchases ($)',
+            data: monthAmounts,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            tension: 0.3,
+            fill: true,
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { grid: { color: 'rgba(30, 41, 59, 1)' } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+
+      // 2. Pie Chart Process (Categories breakdown)
+      var cats = {};
+      expenses.forEach(function(e) {
+        if (e.Category) {
+          cats[e.Category] = (cats[e.Category] || 0) + (Number(e.Amount) || 0);
+        }
+      });
+
+      var catLabels = Object.keys(cats);
+      var catDataset = Object.values(cats);
+
+      var ctxPie = document.getElementById('expensePieChart').getContext('2d');
+      charts.pie = new Chart(ctxPie, {
+        type: 'doughnut',
+        data: {
+          labels: catLabels,
+          datasets: [{
+            data: catDataset,
+            backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#ef4444'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15, font: { size: 10 } } }
+          }
+        }
+      });
+
+      // 3. Asset Bar chart (Balances mapped)
+      var bankLabels = accounts.map(function(a) { return a.AccountName; });
+      var bankDataset = accounts.map(function(a) { return Number(a.CurrentBalance); });
+
+      var ctxBar = document.getElementById('bankBarChart').getContext('2d');
+      charts.bar = new Chart(ctxBar, {
+        type: 'bar',
+        data: {
+          labels: bankLabels,
+          datasets: [{
+            label: 'Balance Reserves ($)',
+            data: bankDataset,
+            backgroundColor: '#3b82f6',
+            borderRadius: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { grid: { color: 'rgba(30, 41, 59, 1)' } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+    }
+
+    // PUSH NOTIFICATIONS / BELL BULLETIN ALERTS
+    function processLoanDeductionAlerts() {
+      var loans = globalState.db.Employee_Loans || [];
+      var alertsDropdown = document.getElementById('repaymentsAlertList');
+      var badge = document.getElementById('alertNotificationBadge');
+      var countLabel = document.getElementById('alertsCountLabel');
+
+      var listHtml = "";
+      var urgentCount = 0;
+
+      loans.forEach(function(l) {
+        if (l.Status === 'Active' && l.NextRepaymentDate) {
+          var today = new Date();
+          var limitDate = new Date();
+          limitDate.setDate(limitDate.getDate() + 3); // 3 day warning threshold
+          
+          var targetDate = new Date(l.NextRepaymentDate);
+          
+          if (targetDate <= limitDate) {
+            urgentCount++;
+            listHtml += `
+              <div class="p-3 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/15 rounded-xl flex flex-col space-y-1.5 transition-all">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-bold text-rose-400 font-mono uppercase tracking-wide">Warning: Repayment Pending</span>
+                  <span class="text-[10px] text-slate-500 font-mono">${l.NextRepaymentDate}</span>
+                </div>
+                <p class="text-xs text-white font-medium">Employee <span class="text-rose-300 font-semibold">${l.EmployeeName}</span></p>
+                <p class="text-slate-400 text-xs">Principal installment of <span class="text-white font-bold">$${Number(l.MonthlyDeductionAmount).toLocaleString()}</span> is schedule-pending.</p>
+              </div>
+            `;
+          }
+        }
+      });
+
+      if (urgentCount > 0) {
+        badge.classList.remove('hidden');
+        countLabel.textContent = urgentCount + " Critical";
+        alertsDropdown.innerHTML = listHtml;
+      } else {
+        badge.classList.add('hidden');
+        countLabel.textContent = "0 Active";
+        alertsDropdown.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">All accounts up to date. No upcoming loan margins.</p>`;
+      }
+    }
+
+    function toggleAlertsList() {
+      var drop = document.getElementById('alertsDropdown');
+      drop.classList.toggle('hidden');
+    }
+
+    // FORM PROCESSORS LINKED WITH GOOGLE SCRIPT EXECUTION
+    document.getElementById('addAccountForm').onsubmit = function(e) {
+      e.preventDefault();
+      var name = document.getElementById('bankNameField').value;
+      var num = document.getElementById('bankNumField').value;
+      var bal = document.getElementById('bankBalanceField').value;
+      var type = document.getElementById('bankTypeField').value;
+
+      var btn = e.target.querySelector('button');
+      btn.textContent = "Syncing with Spreadsheet...";
+      btn.disabled = true;
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function() {
+            btn.textContent = "Save Bank Account";
+            btn.disabled = false;
+            closeModal('addAccountModal');
+            fetchLiveDatabase();
+          })
+          .addBankAccount(name, num, bal, type);
+      } else {
+        setTimeout(function() {
+          btn.textContent = "Save Bank Account";
+          btn.disabled = false;
+          
+          var id = "ACC-" + Math.floor(1000 + Math.random() * 9000);
+          globalState.db.Bank_Accounts.push({
+            AccountID: id,
+            AccountName: name,
+            AccountNumber: num,
+            CurrentBalance: Number(bal),
+            AccountType: type
+          });
+          closeModal('addAccountModal');
+          onDatabaseSynced();
+        }, 800);
+      }
+    };
+
+    document.getElementById('addBalanceForm').onsubmit = function(e) {
+      e.preventDefault();
+      var accId = document.getElementById('fundSelectAccount').value;
+      var amt = document.getElementById('fundAmountField').value;
+
+      var btn = e.target.querySelector('button');
+      btn.textContent = "Funding Ledger...";
+      btn.disabled = true;
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function() {
+            btn.textContent = "Confirm Deposit File";
+            btn.disabled = false;
+            closeModal('addBalanceModal');
+            fetchLiveDatabase();
+          })
+          .injectFunds(accId, amt);
+      } else {
+        setTimeout(function() {
+          btn.textContent = "Confirm Deposit File";
+          btn.disabled = false;
+          
+          globalState.db.Bank_Accounts.forEach(function(b) {
+            if (b.AccountID === accId) b.CurrentBalance += Number(amt);
+          });
+          closeModal('addBalanceModal');
+          onDatabaseSynced();
+        }, 800);
+      }
+    };
+
+    document.getElementById('addExpenseForm').onsubmit = function(e) {
+      e.preventDefault();
+      var date = document.getElementById('expDateField').value;
+      var cat = document.getElementById('expCategoryField').value;
+      var amt = document.getElementById('expAmountField').value;
+      var accId = document.getElementById('expAccountSelect').value;
+      var desc = document.getElementById('expDescField').value;
+      var fileInput = document.getElementById('expFileField');
+
+      var btn = e.target.querySelector('button');
+      btn.textContent = "Writing expense record...";
+      btn.disabled = true;
+
+      // Base64 file mapping
+      var file = fileInput.files[0];
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = function(evt) {
+          sendExpenseToBackend(date, cat, amt, accId, desc, evt.target.result, file.name, btn);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        sendExpenseToBackend(date, cat, amt, accId, desc, "", "", btn);
+      }
+    };
+
+    function sendExpenseToBackend(date, cat, amt, accId, desc, base64Data, filename, btn) {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function() {
+            btn.textContent = "Record Ledger entry";
+            btn.disabled = false;
+            closeModal('addExpenseModal');
+            fetchLiveDatabase();
+          })
+          .logExpense(date, cat, amt, accId, desc, base64Data, filename);
+      } else {
+        setTimeout(function() {
+          btn.textContent = "Record Ledger entry";
+          btn.disabled = false;
+          
+          var id = "EXP-" + Math.floor(10000 + Math.random() * 90000);
+          globalState.db.Expenses.push({
+            Timestamp: new Date().toISOString(),
+            ExpenseID: id,
+            Date: date,
+            Category: cat,
+            Amount: Number(amt),
+            AccountID: accId,
+            Description: desc,
+            ReceiptDriveLink: base64Data ? 'https://drive.google.com/open?id=SimulationLink' : ""
+          });
+
+          // Balances auto-deduction
+          globalState.db.Bank_Accounts.forEach(function(b) {
+            if (b.AccountID === accId) b.CurrentBalance -= Number(amt);
+          });
+
+          closeModal('addExpenseModal');
+          onDatabaseSynced();
+        }, 1000);
+      }
+    }
+
+    document.getElementById('addPaymentForm').onsubmit = function(e) {
+      e.preventDefault();
+      var date = document.getElementById('pmtDateField').value;
+      var paidTo = document.getElementById('pmtPaidToField').value;
+      var cat = document.getElementById('pmtCategoryField').value;
+      var amt = document.getElementById('pmtAmountField').value;
+      var accId = document.getElementById('pmtAccountSelect').value;
+      var method = document.getElementById('pmtMethodField').value;
+      var status = document.getElementById('pmtStatusField').value;
+      var fileInput = document.getElementById('pmtFileField');
+
+      var btn = e.target.querySelector('button');
+      btn.textContent = "Drafting bank voucher...";
+      btn.disabled = true;
+
+      var file = fileInput.files[0];
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = function(evt) {
+          sendPaymentToBackend(date, paidTo, cat, amt, method, status, accId, evt.target.result, file.name, btn);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        sendPaymentToBackend(date, paidTo, cat, amt, method, status, accId, "", "", btn);
+      }
+    };
+
+    function sendPaymentToBackend(date, paidTo, cat, amt, method, status, accId, base64Data, filename, btn) {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function() {
+            btn.textContent = "Disburse Voucher";
+            btn.disabled = false;
+            closeModal('addPaymentModal');
+            fetchLiveDatabase();
+          })
+          .logPayment(date, paidTo, amt, cat, method, status, accId, base64Data, filename);
+      } else {
+        setTimeout(function() {
+          btn.textContent = "Disburse Voucher";
+          btn.disabled = false;
+
+          var id = "PMT-" + Math.floor(10000 + Math.random() * 90000);
+          globalState.db.Payments.push({
+            Timestamp: new Date().toISOString(),
+            PaymentID: id,
+            Date: date,
+            PaidTo: paidTo,
+            Amount: Number(amt),
+            Category: cat,
+            PaymentMethod: method,
+            Status: status,
+            DocumentDriveLink: base64Data ? 'https://drive.google.com/open?id=SimulationLink' : ""
+          });
+
+          // Balances auto-deduction
+          if (accId) {
+            globalState.db.Bank_Accounts.forEach(function(b) {
+              if (b.AccountID === accId) b.CurrentBalance -= Number(amt);
+            });
+          }
+
+          closeModal('addPaymentModal');
+          onDatabaseSynced();
+        }, 1000);
+      }
+    }
+
+    document.getElementById('addLoanForm').onsubmit = function(e) {
+      e.preventDefault();
+      var emp = document.getElementById('loanEmpNameField').value;
+      var amt = document.getElementById('loanAmountField').value;
+      var mths = document.getElementById('loanMonthsField').value;
+      var repayDate = document.getElementById('loanRepayDateField').value;
+
+      var btn = e.target.querySelector('button');
+      btn.textContent = "Registering Corporate loan...";
+      btn.disabled = true;
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function() {
+            btn.textContent = "Establish Active Loan";
+            btn.disabled = false;
+            closeModal('addLoanModal');
+            fetchLiveDatabase();
+          })
+          .issueEmployeeLoan(emp, amt, repayDate, mths);
+      } else {
+        setTimeout(function() {
+          btn.textContent = "Establish Active Loan";
+          btn.disabled = false;
+
+          var id = "LON-" + Math.floor(10000 + Math.random() * 90000);
+          var mthDeduct = Number(amt) / Number(mths);
+          
+          globalState.db.Employee_Loans.push({
+            LoanID: id,
+            EmployeeName: emp,
+            TotalLoanAmount: Number(amt),
+            RemainingBalance: Number(amt),
+            MonthlyDeductionAmount: Math.round(mthDeduct * 100) / 100,
+            StartDate: new Date().toISOString().split('T')[0],
+            Status: 'Active',
+            NextRepaymentDate: repayDate
+          });
+
+          closeModal('addLoanModal');
+          onDatabaseSynced();
+        }, 800);
+      }
+    };
+
+    function triggerRunLoanRepaymentScript() {
+      if (globalState.user.role !== 'Admin') {
+        alert("Action Denied: Full security clearance (Admin role) required to override payroll deductions.");
+        return;
+      }
+      var confirmed = confirm("Are you sure you want to run the automated payroll integration schedule? This will automatically process monthly deductions for all Active employee welfare loans.");
+      if (!confirmed) return;
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(res) {
+            alert("Success: Repayments posted. " + res.updatedLoansCount + " Active records balances were reduced.");
+            fetchLiveDatabase();
+          })
+          .runLoanRepaymentSchedule();
+      } else {
+        // Sim payroll deductions
+        var count = 0;
+        globalState.db.Employee_Loans.forEach(function(l) {
+          if (l.Status === 'Active') {
+            var nextBal = l.RemainingBalance - l.MonthlyDeductionAmount;
+            if (nextBal <= 0) {
+              l.RemainingBalance = 0;
+              l.Status = 'Paid';
+            } else {
+              l.RemainingBalance = nextBal;
+            }
+            if (l.NextRepaymentDate) {
+              var nd = new Date(l.NextRepaymentDate);
+              nd.setMonth(nd.getMonth() + 1);
+              l.NextRepaymentDate = nd.toISOString().split('T')[0];
+            }
+            count++;
+          }
+        });
+        alert("Success [Simulation Mode]: Simulated monthly payroll deduction posted. " + count + " employee balances adjusted in standard memory grid.");
+        onDatabaseSynced();
+      }
+    }
+
+    // GENERAL SEARCH FILTER UTILITY
+    function filterTable(inputId, bodyId) {
+      var query = document.getElementById(inputId).value.toLowerCase();
+      var rows = document.getElementById(bodyId).querySelectorAll('tr');
+      
+      rows.forEach(function(row) {
+        var text = row.textContent.toLowerCase();
+        if (text.includes(query)) {
+          row.classList.remove('hidden');
+        } else {
+          row.classList.add('hidden');
+        }
+      });
+    }
+
+    // HIGH FIDELITY EXPORT CODE
+    function exportToExcel(tableName) {
+      var data = [];
+      if (tableName === 'Expenses') {
+        data = globalState.db.Expenses || [];
+      } else if (tableName === 'Payments') {
+        data = globalState.db.Payments || [];
+      }
+
+      if (data.length === 0) {
+        alert("No ledger entries found to export.");
+        return;
+      }
+
+      var ws = XLSX.utils.json_to_sheet(data);
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, tableName);
+      XLSX.writeFile(wb, "Cuteriaa_Vibe_" + tableName + "_Audit_" + new Date().toISOString().split('T')[0] + ".xlsx");
+    }
+
+    function exportToPDF(tableName) {
+      var data = [];
+      if (tableName === 'Expenses') {
+        data = globalState.db.Expenses || [];
+      } else if (tableName === 'Payments') {
+        data = globalState.db.Payments || [];
+      }
+
+      if (data.length === 0) {
+        alert("No ledger entries found to generate report.");
+        return;
+      }
+
+      var { jsPDF } = window.jspdf;
+      var doc = new jsPDF('p', 'mm', 'a4');
+      
+      doc.setFillColor(15, 23, 42); // slate 900
+      doc.rect(0, 0, 210, 40, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.setFont("Helvetica", "bold");
+      doc.text("CUTERIAA VIBE FINTECH SYSTEM", 14, 18);
+      
+      doc.setFontSize(10);
+      doc.setFont("Helvetica", "normal");
+      doc.text("Official Business Ledger Audit Report — Table: " + tableName, 14, 26);
+      doc.text("Generated: " + new Date().toLocaleString(), 14, 32);
+
+      var y = 50;
+      doc.setTextColor(60, 60, 60);
+      doc.setFontSize(9);
+      doc.setFont("Helvetica", "bold");
+      
+      if (tableName === 'Expenses') {
+        doc.text("Date", 14, y);
+        doc.text("Category", 40, y);
+        doc.text("Description", 75, y);
+        doc.text("Amount", 170, y);
+        
+        doc.line(14, y + 2, 196, y + 2);
+        y += 8;
+        doc.setFont("Helvetica", "normal");
+        
+        expenses.forEach(function(item) {
+          if (y > 270) { doc.addPage(); y = 20; }
+          doc.text(String(item.Date || ''), 14, y);
+          doc.text(String(item.Category || ''), 40, y);
+          doc.text(String(item.Description || '').substring(0, 40), 75, y);
+          doc.text("$" + Number(item.Amount || 0).toLocaleString(), 170, y);
+          y += 6;
+        });
+      } else {
+        doc.text("Date", 14, y);
+        doc.text("Beneficiary", 40, y);
+        doc.text("Category", 100, y);
+        doc.text("Method", 135, y);
+        doc.text("Amount", 170, y);
+        
+        doc.line(14, y + 2, 196, y + 2);
+        y += 8;
+        doc.setFont("Helvetica", "normal");
+        
+        payments.forEach(function(item) {
+          if (y > 270) { doc.addPage(); y = 20; }
+          doc.text(String(item.Date || ''), 14, y);
+          doc.text(String(item.PaidTo || '').substring(0, 25), 40, y);
+          doc.text(String(item.Category || ''), 100, y);
+          doc.text(String(item.PaymentMethod || ''), 135, y);
+          doc.text("$" + Number(item.Amount || 0).toLocaleString(), 170, y);
+          y += 6;
+        });
+      }
+      
+      doc.save("Cuteriaa_Vibe_" + tableName + "_Report.pdf");
+    }
+  </script>
+</body>
+</html>
