@@ -99,6 +99,7 @@ export default function App() {
     return localStorage.getItem('cuteriaa_apps_script_url') || 'https://script.google.com/macros/s/AKfycbwgZPDW2B5-5-jAgCOMBSJqF0NGHczO2efVP3wXeHh79K8SkFW_uFakI1y9WRUMn_fW/exec';
   });
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loanSuccessMsg, setLoanSuccessMsg] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -197,25 +198,55 @@ export default function App() {
   }, [customScriptUrl]);
 
   // Persist db amendments back to LocalDatabase
-  const updateDatabase = async (newDb: SpreadsheetData) => {
-    setDb(newDb);
-    LocalDatabase.save(newDb);
+  const updateDatabase = async (input: SpreadsheetData | ((prev: SpreadsheetData) => SpreadsheetData)) => {
+    let nextDb: SpreadsheetData;
     
+    // Dedup helper
+    const deduplicate = <T extends { [key: string]: any }>(list: T[], idKey: string): T[] => {
+      if (!list) return [];
+      const seen = new Set();
+      return list.filter(item => {
+        const id = item[idKey];
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+    };
+
+    const sanitize = (data: SpreadsheetData): SpreadsheetData => ({
+      ...data,
+      Bank_Accounts: deduplicate(data.Bank_Accounts, 'AccountID'),
+      Inventory: deduplicate(data.Inventory, 'ProductID'),
+      Expenses: deduplicate(data.Expenses, 'ExpenseID'),
+      Payments: deduplicate(data.Payments, 'PaymentID'),
+      Employee_Loans: deduplicate(data.Employee_Loans, 'LoanID'),
+      Users: deduplicate(data.Users, 'Username'),
+    });
+
+    setDb((prev) => {
+      const updated = typeof input === 'function' ? input(prev) : input;
+      nextDb = sanitize(updated);
+      LocalDatabase.save(nextDb);
+      return nextDb;
+    });
+
+    // Note: nextDb is assigned inside setDb which is synchronous in its execution of the updater
     if (customScriptUrl) {
+      // We use a small timeout or just use the input if it was an object, 
+      // but to be safe we should ideally push the sanitized version.
+      // Since setDb updater runs immediately, nextDb will be available here.
       try {
         await fetch(customScriptUrl, {
           method: 'POST',
           mode: 'no-cors',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'syncFullDatabase',
-            db: newDb
+            db: typeof input === 'function' ? nextDb! : input // nextDb will be set after setDb call
           })
         });
       } catch (err) {
-        console.error("Failed to push database update to Google Sheets:", err);
+        console.error("Failed to push database update:", err);
       }
     }
   };
@@ -438,36 +469,43 @@ export default function App() {
   };
 
   // Form Submissions - Add Inventory product
-  const handleAddInventorySubmit = (e: React.FormEvent) => {
+  const handleAddInventorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanPrice = parseFloat(newProdPrice) || 0;
-    const cleanSellPrice = parseFloat(newProdSellPrice) || 0;
-    const cleanStock = parseInt(newProdStock) || 0;
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
+    try {
+      const cleanPrice = parseFloat(newProdPrice) || 0;
+      const cleanSellPrice = parseFloat(newProdSellPrice) || 0;
+      const cleanStock = parseInt(newProdStock) || 0;
 
-    const newItem: InventoryItemRow = {
-      ProductID: `PRD-${Math.floor(9000 + Math.random() * 999)}`,
-      ProductName: newProdName,
-      PhotoUrl: newProdPhotoUrl || 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&q=80&w=300',
-      Price: cleanPrice,
-      SellPrice: cleanSellPrice || Math.round(cleanPrice * 1.5),
-      Stock: cleanStock,
-      Color: newProdColor,
-      Status: newProdStatus
-    };
+      const newItem: InventoryItemRow = {
+        ProductID: `PRD-${Math.floor(9000 + Math.random() * 999)}`,
+        ProductName: newProdName,
+        PhotoUrl: newProdPhotoUrl || 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&q=80&w=300',
+        Price: cleanPrice,
+        SellPrice: cleanSellPrice || Math.round(cleanPrice * 1.5),
+        Stock: cleanStock,
+        Color: newProdColor,
+        Status: newProdStatus
+      };
 
-    updateDatabase({
-      ...db,
-      Inventory: [...(db.Inventory || []), newItem]
-    });
+      await updateDatabase({
+        ...db,
+        Inventory: [...(db.Inventory || []), newItem]
+      });
 
-    setNewProdName('');
-    setNewProdPhotoUrl('');
-    setNewProdPrice('');
-    setNewProdSellPrice('');
-    setNewProdStock('0');
-    setNewProdColor('Matte Black');
-    setNewProdStatus('In Stock');
-    setActiveModal('none');
+      setNewProdName('');
+      setNewProdPhotoUrl('');
+      setNewProdPrice('');
+      setNewProdSellPrice('');
+      setNewProdStock('0');
+      setNewProdColor('Matte Black');
+      setNewProdStatus('In Stock');
+      setActiveModal('none');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleRestockProduct = (prodId: string, delta: number) => {
@@ -531,32 +569,39 @@ export default function App() {
   };
 
   // Form Submissions - Link new bank
-  const handleAddAccountSubmit = (e: React.FormEvent) => {
+  const handleAddAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentUser?.Role !== 'Admin') {
-      alert("Action Revoked: Manager accounts are restricted to expense logging operations.");
-      return;
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      if (currentUser?.Role !== 'Admin') {
+        alert("Action Revoked: Manager accounts are restricted to expense logging operations.");
+        return;
+      }
+
+      const id = "ACC-" + Math.floor(1000 + Math.random() * 9000);
+      const newRow: BankAccountRow = {
+        AccountID: id,
+        AccountName: newAccName,
+        AccountNumber: newAccNumber,
+        CurrentBalance: Number(newAccBalance) || 0,
+        AccountType: newAccType
+      };
+
+      await updateDatabase({
+        ...db,
+        Bank_Accounts: [...db.Bank_Accounts, newRow]
+      });
+
+      // Reset Form
+      setNewAccName('');
+      setNewAccNumber('');
+      setNewAccBalance('');
+      setActiveModal('none');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    const id = "ACC-" + Math.floor(1000 + Math.random() * 9000);
-    const newRow: BankAccountRow = {
-      AccountID: id,
-      AccountName: newAccName,
-      AccountNumber: newAccNumber,
-      CurrentBalance: Number(newAccBalance) || 0,
-      AccountType: newAccType
-    };
-
-    updateDatabase({
-      ...db,
-      Bank_Accounts: [...db.Bank_Accounts, newRow]
-    });
-
-    // Reset Form
-    setNewAccName('');
-    setNewAccNumber('');
-    setNewAccBalance('');
-    setActiveModal('none');
   };
 
   // Form Submissions - Deposit Injection
@@ -584,167 +629,188 @@ export default function App() {
   };
 
   // Form Submissions - Record Expense (With auto-deductions)
-  const handleAddExpenseSubmit = (e: React.FormEvent) => {
+  const handleAddExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanAmt = Number(expAmount) || 0;
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    // Verify channel balance first to guarantee coverage
-    const sourceAcc = db.Bank_Accounts.find(b => b.AccountID === expAccId);
-    if (!sourceAcc) {
-      alert("Error: Deduct Channel Account ID could not be resolved.");
-      return;
-    }
+    try {
+      const cleanAmt = Number(expAmount) || 0;
 
-    if (sourceAcc.CurrentBalance < cleanAmt) {
-      const runDeduct = window.confirm(`Warning: Selected source channel balance (৳${sourceAcc.CurrentBalance.toLocaleString()}) is lower than the transaction amount (৳${cleanAmt.toLocaleString()}). Post transaction anyway and overdraw account?`);
-      if (!runDeduct) return;
-    }
-
-    const expId = "EXP-" + Math.floor(10000 + Math.random() * 90000);
-    const ts = new Date().toISOString();
-
-    const newExpense: ExpenseRow = {
-      Timestamp: ts,
-      ExpenseID: expId,
-      Date: expDate,
-      Category: expCategory,
-      Amount: cleanAmt,
-      AccountID: expAccId,
-      Description: expDesc,
-      ReceiptDriveLink: receiptBase64 ? 'https://drive.google.com/open?id=SimulatedReceiptLink' : ''
-    };
-
-    // Deduct Balance Atomically
-    const updatedChannels = db.Bank_Accounts.map(b => {
-      if (b.AccountID === expAccId) {
-        return { ...b, CurrentBalance: b.CurrentBalance - cleanAmt };
+      // Verify channel balance first to guarantee coverage
+      const sourceAcc = db.Bank_Accounts.find(b => b.AccountID === expAccId);
+      if (!sourceAcc) {
+        alert("Error: Deduct Channel Account ID could not be resolved.");
+        return;
       }
-      return b;
-    });
 
-    updateDatabase({
-      ...db,
-      Expenses: [...db.Expenses, newExpense],
-      Bank_Accounts: updatedChannels
-    });
+      if (sourceAcc.CurrentBalance < cleanAmt) {
+        const runDeduct = window.confirm(`Warning: Selected source channel balance (৳${sourceAcc.CurrentBalance.toLocaleString()}) is lower than the transaction amount (৳${cleanAmt.toLocaleString()}). Post transaction anyway and overdraw account?`);
+        if (!runDeduct) return;
+      }
 
-    // Reset
-    setExpAmount('');
-    setExpDesc('');
-    setReceiptBase64('');
-    setReceiptFileName('');
-    setActiveModal('none');
+      const expId = "EXP-" + Math.floor(10000 + Math.random() * 90000);
+      const ts = new Date().toISOString();
+
+      const newExpense: ExpenseRow = {
+        Timestamp: ts,
+        ExpenseID: expId,
+        Date: expDate,
+        Category: expCategory,
+        Amount: cleanAmt,
+        AccountID: expAccId,
+        Description: expDesc,
+        ReceiptDriveLink: receiptBase64 ? 'https://drive.google.com/open?id=SimulatedReceiptLink' : ''
+      };
+
+      // Deduct Balance Atomically
+      const updatedChannels = db.Bank_Accounts.map(b => {
+        if (b.AccountID === expAccId) {
+          return { ...b, CurrentBalance: b.CurrentBalance - cleanAmt };
+        }
+        return b;
+      });
+
+      await updateDatabase({
+        ...db,
+        Expenses: [newExpense, ...db.Expenses],
+        Bank_Accounts: updatedChannels
+      });
+
+      // Reset
+      setExpAmount('');
+      setExpDesc('');
+      setReceiptBase64('');
+      setReceiptFileName('');
+      setActiveModal('none');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Form Submissions - Post Payment Voucher (With auto-deductions)
-  const handleAddPaymentSubmit = (e: React.FormEvent) => {
+  const handleAddPaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanAmt = Number(pmtAmount) || 0;
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    const sourceAcc = db.Bank_Accounts.find(b => b.AccountID === pmtAccId);
-    if (!sourceAcc) {
-      alert("Error: Deduct Channel Account ID could not be resolved.");
-      return;
-    }
+    try {
+      const cleanAmt = Number(pmtAmount) || 0;
 
-    if (sourceAcc.CurrentBalance < cleanAmt) {
-      const runDeduct = window.confirm(`Warning: Selected source channel balance (৳${sourceAcc.CurrentBalance.toLocaleString()}) is lower than the transaction amount (৳${cleanAmt.toLocaleString()}). Process payment anyway and overdraw account?`);
-      if (!runDeduct) return;
-    }
-
-    const pmtId = "PMT-" + Math.floor(10000 + Math.random() * 90000);
-    const ts = new Date().toISOString();
-
-    const newPayment: PaymentRow = {
-      Timestamp: ts,
-      PaymentID: pmtId,
-      Date: pmtDate,
-      PaidTo: pmtPaidTo,
-      Amount: cleanAmt,
-      Category: pmtCategory,
-      PaymentMethod: pmtMethod,
-      Status: pmtStatus,
-      DocumentDriveLink: pmtBase64 ? 'https://drive.google.com/open?id=SimulatedDocumentLink' : ''
-    };
-
-    // Deduct balance atomically
-    const updatedChannels = db.Bank_Accounts.map(b => {
-      if (b.AccountID === pmtAccId) {
-        return { ...b, CurrentBalance: b.CurrentBalance - cleanAmt };
+      const sourceAcc = db.Bank_Accounts.find(b => b.AccountID === pmtAccId);
+      if (!sourceAcc) {
+        alert("Error: Deduct Channel Account ID could not be resolved.");
+        return;
       }
-      return b;
-    });
 
-    updateDatabase({
-      ...db,
-      Payments: [...db.Payments, newPayment],
-      Bank_Accounts: updatedChannels
-    });
+      if (sourceAcc.CurrentBalance < cleanAmt) {
+        const runDeduct = window.confirm(`Warning: Selected source channel balance (৳${sourceAcc.CurrentBalance.toLocaleString()}) is lower than the transaction amount (৳${cleanAmt.toLocaleString()}). Process payment anyway and overdraw account?`);
+        if (!runDeduct) return;
+      }
 
-    // Reset
-    setPmtPaidTo('');
-    setPmtAmount('');
-    setPmtBase64('');
-    setPmtFileName('');
-    setActiveModal('none');
+      const pmtId = "PMT-" + Math.floor(10000 + Math.random() * 90000);
+      const ts = new Date().toISOString();
+
+      const newPayment: PaymentRow = {
+        Timestamp: ts,
+        PaymentID: pmtId,
+        Date: pmtDate,
+        PaidTo: pmtPaidTo,
+        Amount: cleanAmt,
+        Category: pmtCategory,
+        PaymentMethod: pmtMethod,
+        Status: pmtStatus,
+        DocumentDriveLink: pmtBase64 ? 'https://drive.google.com/open?id=SimulatedDocumentLink' : ''
+      };
+
+      // Deduct balance atomically
+      const updatedChannels = db.Bank_Accounts.map(b => {
+        if (b.AccountID === pmtAccId) {
+          return { ...b, CurrentBalance: b.CurrentBalance - cleanAmt };
+        }
+        return b;
+      });
+
+      await updateDatabase({
+        ...db,
+        Payments: [newPayment, ...db.Payments],
+        Bank_Accounts: updatedChannels
+      });
+
+      // Reset
+      setPmtPaidTo('');
+      setPmtAmount('');
+      setPmtBase64('');
+      setPmtFileName('');
+      setActiveModal('none');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Form Submissions - Establish Loan record
-  const handleAddLoanSubmit = (e: React.FormEvent) => {
+  const handleAddLoanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentUser?.Role !== 'Admin') {
-      alert("Action Revoked: Manager accounts do not have Welfare Loan issuing privileges.");
-      return;
-    }
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    const cleanAmt = Number(loanAmount) || 0;
-    const cleanMonths = Number(loanMonths) || 12;
-    const monthlyDeduct = cleanAmt / cleanMonths;
-
-    const sourceAcc = db.Bank_Accounts.find(b => b.AccountID === loanAccId);
-    if (!sourceAcc) {
-      alert("Error: Disbursement Channel Account ID could not be resolved.");
-      return;
-    }
-
-    if (sourceAcc.CurrentBalance < cleanAmt) {
-      const runDeduct = window.confirm(`Warning: Selected disbursement channel balance (৳${sourceAcc.CurrentBalance.toLocaleString()}) is lower than the transaction amount (৳${cleanAmt.toLocaleString()}). Process loan anyway and overdraw account?`);
-      if (!runDeduct) return;
-    }
-
-    const loanId = "LON-" + Math.floor(10000 + Math.random() * 90000);
-
-    const newLoan: EmployeeLoanRow = {
-      LoanID: loanId,
-      EmployeeName: loanEmpName,
-      TotalLoanAmount: cleanAmt,
-      RemainingBalance: cleanAmt,
-      MonthlyDeductionAmount: Math.round(monthlyDeduct * 100) / 100,
-      StartDate: new Date().toISOString().split('T')[0],
-      Status: 'Active',
-      NextRepaymentDate: loanRepayDate,
-      SourceAccountID: loanAccId
-    };
-
-    // Deduct atomic balance from specified Bank_Accounts element
-    const updatedChannels = db.Bank_Accounts.map(b => {
-      if (b.AccountID === loanAccId) {
-        return { ...b, CurrentBalance: b.CurrentBalance - cleanAmt };
+    try {
+      if (currentUser?.Role !== 'Admin') {
+        alert("Action Revoked: Manager accounts do not have Welfare Loan issuing privileges.");
+        return;
       }
-      return b;
-    });
 
-    updateDatabase({
-      ...db,
-      Employee_Loans: [...db.Employee_Loans, newLoan],
-      Bank_Accounts: updatedChannels
-    });
+      const cleanAmt = Number(loanAmount) || 0;
+      const cleanMonths = Number(loanMonths) || 12;
+      const monthlyDeduct = cleanAmt / cleanMonths;
 
-    setLoanEmpName('');
-    setLoanAmount('');
-    setLoanMonths('12');
-    setLoanRepayDate('');
-    setActiveModal('none');
+      const sourceAcc = db.Bank_Accounts.find(b => b.AccountID === loanAccId);
+      if (!sourceAcc) {
+        alert("Error: Disbursement Channel Account ID could not be resolved.");
+        return;
+      }
+
+      if (sourceAcc.CurrentBalance < cleanAmt) {
+        const runDeduct = window.confirm(`Warning: Selected disbursement channel balance (৳${sourceAcc.CurrentBalance.toLocaleString()}) is lower than the transaction amount (৳${cleanAmt.toLocaleString()}). Process loan anyway and overdraw account?`);
+        if (!runDeduct) return;
+      }
+
+      const loanId = "LON-" + Math.floor(10000 + Math.random() * 90000);
+
+      const newLoan: EmployeeLoanRow = {
+        LoanID: loanId,
+        EmployeeName: loanEmpName,
+        TotalLoanAmount: cleanAmt,
+        RemainingBalance: cleanAmt,
+        MonthlyDeductionAmount: Math.round(monthlyDeduct * 100) / 100,
+        StartDate: new Date().toISOString().split('T')[0],
+        Status: 'Active',
+        NextRepaymentDate: loanRepayDate,
+        SourceAccountID: loanAccId
+      };
+
+      // Deduct atomic balance from specified Bank_Accounts element
+      const updatedChannels = db.Bank_Accounts.map(b => {
+        if (b.AccountID === loanAccId) {
+          return { ...b, CurrentBalance: b.CurrentBalance - cleanAmt };
+        }
+        return b;
+      });
+
+      await updateDatabase({
+        ...db,
+        Employee_Loans: [newLoan, ...db.Employee_Loans],
+        Bank_Accounts: updatedChannels
+      });
+
+      setLoanEmpName('');
+      setLoanAmount('');
+      setLoanMonths('12');
+      setLoanRepayDate('');
+      setActiveModal('none');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // SCRIPT SYNCHRONIZER METRICS (For real sheets testing simulation)
@@ -2435,8 +2501,12 @@ export default function App() {
                       <option value="Cash">Cash Vault</option>
                     </select>
                   </div>
-                  <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer">
-                    Commit Account row
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className={`w-full ${isSubmitting ? 'bg-slate-700' : 'bg-slate-900 hover:bg-slate-800'} text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer disabled:cursor-not-allowed`}
+                  >
+                    {isSubmitting ? 'Syncing Record...' : 'Commit Account row'}
                   </button>
                 </form>
               )}
@@ -2471,8 +2541,12 @@ export default function App() {
                       placeholder="e.g. 150000"
                     />
                   </div>
-                  <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer">
-                    Post Funding Deposit
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className={`w-full ${isSubmitting ? 'bg-slate-700' : 'bg-slate-900 hover:bg-slate-800'} text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer disabled:cursor-not-allowed`}
+                  >
+                    {isSubmitting ? 'Injesting Funds...' : 'Post Funding Deposit'}
                   </button>
                 </form>
               )}
@@ -2557,8 +2631,12 @@ export default function App() {
                     />
                     {receiptFileName && <p className="text-[10px] text-emerald-650 font-mono mt-1">✓ File processed: {receiptFileName}</p>}
                   </div>
-                  <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer mt-2">
-                    Execute ledger transaction
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className={`w-full ${isSubmitting ? 'bg-slate-700' : 'bg-slate-900 hover:bg-slate-800'} text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer disabled:cursor-not-allowed mt-2`}
+                  >
+                    {isSubmitting ? 'Logging...' : 'Execute ledger transaction'}
                   </button>
                 </form>
               )}
@@ -2666,8 +2744,12 @@ export default function App() {
                     />
                     {pmtFileName && <p className="text-[10px] text-emerald-650 font-mono mt-1">✓ File processed: {pmtFileName}</p>}
                   </div>
-                  <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer">
-                    Publish disbursement voucher
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className={`w-full ${isSubmitting ? 'bg-slate-700' : 'bg-slate-900 hover:bg-slate-800'} text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer disabled:cursor-not-allowed`}
+                  >
+                    {isSubmitting ? 'Processing Voucher...' : 'Publish disbursement voucher'}
                   </button>
                 </form>
               )}
@@ -2739,8 +2821,12 @@ export default function App() {
                       ))}
                     </select>
                   </div>
-                  <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer">
-                    Issue Welfare Loan Account
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className={`w-full ${isSubmitting ? 'bg-slate-700' : 'bg-slate-900 hover:bg-slate-800'} text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer disabled:cursor-not-allowed`}
+                  >
+                    {isSubmitting ? 'Issuing...' : 'Issue Welfare Loan Account'}
                   </button>
                 </form>
               )}
@@ -2845,9 +2931,13 @@ export default function App() {
                     </select>
                   </div>
 
-                  <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer flex items-center justify-center">
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className={`w-full ${isSubmitting ? 'bg-slate-700' : 'bg-slate-900 hover:bg-slate-800'} text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition shadow-md hover:cursor-pointer flex items-center justify-center disabled:cursor-not-allowed`}
+                  >
                     <Package size={14} className="mr-1.5" />
-                    Publish Product Item
+                    {isSubmitting ? 'Adding...' : 'Publish Product Item'}
                   </button>
                 </form>
               )}
